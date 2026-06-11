@@ -1,19 +1,9 @@
 import { MapPin, Search, MessageSquare, Mic, TrendingUp, ArrowLeft } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
-import MapSection from './MapSketch'; // 👈 팀원분이 분리한 지도 컴포넌트 호출
+import { useState, useEffect } from 'react';
+import MapSection from './MapSketch'; 
 
-// 🌐 [중요] 백엔드 서버를 켠 컴퓨터의 IP 주소를 적어주세요.
-// 팀원과 테스트할 때 IP가 바뀌면 이 줄만 수정하면 아래 모든 기능(혼잡도, 챗봇)이 한 번에 연동됩니다!
+// 🌐 백엔드 서버 하마치 가상 IP 연동
 const YOUR_COMPUTER_IP = '25.4.238.217'; 
-
-const EXHIBITS = [
-  { id: 1, x: 200, y: 200, name: 'AI 임베디드 시스템',  info: '하드웨어에 AI를 직접 내장해 네트워크 없이 동작하는 온디바이스 AI 기술 전시', range: 45, beaconId: 'A1' },
-  { id: 2, x: 400, y: 200, name: '스마트 센서 네트워크', info: '온도·습도·조도 등 다양한 센서를 IoT로 연결해 실시간 데이터를 수집·분석', range: 45, beaconId: 'A2' },
-  { id: 3, x: 600, y: 200, name: '자율주행 로봇',        info: '라이다·카메라 센서를 활용해 장애물을 인식하고 스스로 경로를 찾아가는 로봇 시연', range: 45, beaconId: 'A3' },
-  { id: 4, x: 200, y: 400, name: 'ICT PBL 프로젝트',    info: '학생들이 직접 기획·개발한 ICT 융합 프로젝트 결과물 전시 및 체험', range: 45, beaconId: 'A4' },
-  { id: 5, x: 400, y: 400, name: '딥러닝 이미지 인식',   info: '카메라로 사물을 촬영하면 딥러닝 모델이 실시간으로 분류 결과를 보여주는 체험', range: 45, beaconId: 'A5' },
-  { id: 6, x: 600, y: 400, name: '스마트 홈 제어판',     info: '음성·앱으로 조명·온도·보안을 제어하는 스마트 홈 시스템 체험 부스', range: 45, beaconId: 'A6' },
-];
 
 const MENU_ITEMS = [
   { id: 'map',       icon: MapPin,        label: '지도 및 경로 안내', desc: '전시물 위치 확인 & 길찾기',         color: '#EEF6FB', accent: '#6BAED6', emoji: '🗺️' },
@@ -28,27 +18,17 @@ const T = {
   text: '#2D3250', sub: '#8A90A8', inputBg: '#F2F4FA',
 };
 
-// 혼잡도 레벨 계산: 인원수 → { label, color, bg }
 function getCongestionLevel(count) {
   if (!count || count === 0) return { label: '여유', color: '#74C476', bg: '#EDF7EE', emoji: '🟢' };
-  if (count <= 2)             return { label: '보통', color: '#FDAE6B', bg: '#FEF9EC', emoji: '🟡' };
-  return                               { label: '혼잡', color: '#F768A1', bg: '#FEF0F5', emoji: '🔴' };
+  if (count <= 2)              return { label: '보통', color: '#FDAE6B', bg: '#FEF9EC', emoji: '🟡' };
+  return                                { label: '혼잡', color: '#F768A1', bg: '#FEF0F5', emoji: '🔴' };
 }
 
-// 고유 userId 생성 (세션 단위)
-function getUserId() {
-  let id = sessionStorage.getItem('guidant_uid');
-  if (!id) { id = 'u_' + Math.random().toString(36).slice(2); sessionStorage.setItem('guidant_uid', id); }
-  return id;
-}
-
-/* ── 혼잡도 훅: 앱 전체에서 공유 ── */
 function useCongestion() {
   const [congestion, setCongestion] = useState({});
   useEffect(() => {
     const fetch_ = async () => {
       try {
-        // ✨ 고정된 localhost 대신 외부 컴퓨터 IP(하마치)와 동적 연동 완료!
         const res = await fetch(`http://${YOUR_COMPUTER_IP}:3000/presence`);
         const data = await res.json();
         setCongestion(data.congestion || {});
@@ -98,7 +78,6 @@ function HomeMenu({ onNavigate }) {
     <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <p style={{ fontSize: 13, color: T.sub, marginBottom: 4 }}>어떤 기능을 이용하시겠어요? 👀</p>
       {MENU_ITEMS.map((item) => {
-        const Icon = item.icon;
         return (
           <button key={item.id} onClick={() => onNavigate(item.id)} style={{
             display: 'flex', alignItems: 'center', gap: 14,
@@ -129,12 +108,12 @@ function HomeMenu({ onNavigate }) {
 function ExhibitsSection() {
   const congestion = useCongestion();
   const items = [
-    { name: 'AI 임베디드 시스템',   category: '온디바이스 AI',    beaconId: 'A1', dot: '#6BAED6' },
-    { name: '스마트 센서 네트워크', category: 'IoT / 센서',        beaconId: 'A2', dot: '#74C476' },
-    { name: '자율주행 로봇',        category: '로보틱스',           beaconId: 'A3', dot: '#FDAE6B' },
-    { name: 'ICT PBL 프로젝트',    category: 'PBL 프로젝트',      beaconId: 'A4', dot: '#F768A1' },
-    { name: '딥러닝 이미지 인식',   category: '딥러닝 / 비전 AI',  beaconId: 'A5', dot: '#9B8FE8' },
-    { name: '스마트 홈 제어판',     category: '스마트 홈 / IoT',   beaconId: 'A6', dot: '#F9A8D4' },
+    { name: '작품1',   category: '전시물',    beaconId: 'A1', dot: '#6BAED6' },
+    { name: '작품2',   category: '전시물',    beaconId: 'A2', dot: '#74C476' },
+    { name: '작품3',   category: '전시물',    beaconId: 'A3', dot: '#FDAE6B' },
+    { name: '작품4',   category: '전시물',    beaconId: 'A4', dot: '#F768A1' },
+    { name: '작품5',   category: '전시물',    beaconId: 'A5', dot: '#9B8FE8' },
+    { name: '작품6',   category: '전시물',    beaconId: 'A6', dot: '#F9A8D4' },
   ];
   return (
     <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -153,7 +132,6 @@ function ExhibitsSection() {
               <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{item.name}</div>
               <div style={{ fontSize: 12, color: T.sub, marginTop: 3 }}>{item.category}</div>
             </div>
-            {/* 혼잡도 배지 */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 11, fontWeight: 600, color: level.color,
@@ -186,7 +164,6 @@ function ChatSection() {
     const loadId = Date.now() + 1;
     setMessages(prev => [...prev, { id: loadId, sender: 'bot', text: 'Guidant가 생각 중입니다...' }]);
     try {
-      // ✨ 고정된 localhost 대신 외부 컴퓨터 IP(하마치)와 동적 연동 완료!
       const res = await fetch(`http://${YOUR_COMPUTER_IP}:3000/chat`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userText }),
@@ -305,9 +282,25 @@ export default function App() {
   const ActiveSection = activePage ? SECTION_MAP[activePage] : null;
 
   return (
-    <div style={{ width: '100%', height: '100%', background: T.bg, overflowY: 'auto' }}>
+    <div style={{ 
+      width: '100vw', 
+      height: '100vh', 
+      background: T.bg, 
+      // ✨ 핵심 교정: 지도 페이지일 때는 스크롤을 막아 잔상 버그 차단
+      overflowY: activePage === 'map' ? 'hidden' : 'auto', 
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
       <Header activePage={activePage} onBack={() => setActivePage(null)} />
-      <main style={{ maxWidth: 480, margin: '0 auto' }}>
+      
+      {/* ✨ 핵심 교정: 지도가 긴 화면(767px)을 다 쓰더라도 깨지지 않게 유연하게 설정 */}
+      <main style={{ 
+        width: '100%',
+        maxWidth: activePage === 'map' ? 'none' : 480, 
+        margin: '0 auto',
+        flex: 1,
+        overflowY: activePage === 'map' ? 'auto' : 'visible'
+      }}>
         {activePage === null ? <HomeMenu onNavigate={setActivePage} /> : <ActiveSection />}
       </main>
     </div>
