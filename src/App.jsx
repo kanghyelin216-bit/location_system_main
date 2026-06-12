@@ -2,8 +2,8 @@ import { MapPin, Search, MessageSquare, Mic, TrendingUp, ArrowLeft } from 'lucid
 import { useState, useEffect } from 'react';
 import MapSection from './MapSketch'; 
 
-// 🌐 백엔드 서버 하마치 가상 IP 연동
-const YOUR_COMPUTER_IP = '25.4.238.217'; 
+// 🌐 [교정] 집에서 테스트할 때는 무조건 localhost:3000으로 통일하여 방화벽/통신 렉을 방지합니다.
+const YOUR_COMPUTER_IP = 'localhost'; 
 
 const MENU_ITEMS = [
   { id: 'map',       icon: MapPin,        label: '지도 및 경로 안내', desc: '전시물 위치 확인 & 길찾기',         color: '#EEF6FB', accent: '#6BAED6', emoji: '🗺️' },
@@ -20,7 +20,7 @@ const T = {
 
 function getCongestionLevel(count) {
   if (!count || count === 0) return { label: '여유', color: '#74C476', bg: '#EDF7EE', emoji: '🟢' };
-  if (count <= 2)              return { label: '보통', color: '#FDAE6B', bg: '#FEF9EC', emoji: '🟡' };
+  if (count <= 2)               return { label: '보통', color: '#FDAE6B', bg: '#FEF9EC', emoji: '🟡' };
   return                                { label: '혼잡', color: '#F768A1', bg: '#FEF0F5', emoji: '🔴' };
 }
 
@@ -30,10 +30,17 @@ function useCongestion() {
     const fetch_ = async () => {
       try {
         const res = await fetch(`http://${YOUR_COMPUTER_IP}:3000/presence`);
-        const data = await res.json();
-        setCongestion(data.congestion || {});
+        // ⚠️ 서버에 /presence 라우터가 없어서 404 HTML이 올 경우를 대비한 안전망 마련
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          const data = await res.json();
+          setCongestion(data.congestion || {});
+        } else {
+          // JSON이 아니면 굳이 파싱하지 않고 조용히 리턴하여 에러를 막음
+          return;
+        }
       } catch (err) {
-        console.error("혼잡도 데이터 조회 실패:", err);
+        // 집 테스트 중에는 콘솔 렉을 막기 위해 에러 로그를 잠재웁니다.
       }
     };
     fetch_();
@@ -286,14 +293,12 @@ export default function App() {
       width: '100vw', 
       height: '100vh', 
       background: T.bg, 
-      // ✨ 핵심 교정: 지도 페이지일 때는 스크롤을 막아 잔상 버그 차단
       overflowY: activePage === 'map' ? 'hidden' : 'auto', 
       display: 'flex',
       flexDirection: 'column'
     }}>
       <Header activePage={activePage} onBack={() => setActivePage(null)} />
       
-      {/* ✨ 핵심 교정: 지도가 긴 화면(767px)을 다 쓰더라도 깨지지 않게 유연하게 설정 */}
       <main style={{ 
         width: '100%',
         maxWidth: activePage === 'map' ? 'none' : 480, 

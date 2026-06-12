@@ -4,7 +4,6 @@ import { io } from "socket.io-client";
 const showGrid = false; 
 const CANVAS_WIDTH = 362;
 const CANVAS_HEIGHT = 767;
-const YOUR_COMPUTER_IP = 'localhost'; 
 
 const mapObjects = [
   { x: 332, y: 84,  w: 30,  h: 111, name: '작품1', type: 'booth', author: '작가명', desc: '작품 설명' },
@@ -22,31 +21,44 @@ const MapSketch = () => {
   const [userPos, setUserPos] = useState({ x: 181, y: 383 });
   const [selectedArtwork, setSelectedArtwork] = useState(null); 
   const p5InstanceRef = useRef(null);
+  const socketRef = useRef(null); // 중복 연결 방지를 위한 소켓 레퍼런스 고정
 
-  // 📡 1. 실시간 웹소켓 위치 수신
+  // 📡 1. 실시간 웹소켓 최적화 연동 (Strict Mode 중복 방지)
   useEffect(() => {
-    const socket = io(`http://${YOUR_COMPUTER_IP}:3000`, {
+    if (socketRef.current) return;
+
+    console.log("🌐 백엔드 서버로 최적화 소켓 연동 시도 중...");
+    
+    socketRef.current = io("http://192.168.219.109:3000", {
       transports: ['websocket'],
+      upgrade: false,
+      forceNew: true,
       reconnectionAttempts: 5
     });
 
-    socket.on('location_update', (data) => {
+    socketRef.current.on('connect', () => {
+      console.log("✅ [최종 성공] 리액트 웹앱이 백엔드 소켓 서버에 완전히 붙었습니다! ID:", socketRef.current.id);
+    });
+
+    socketRef.current.on('location_update', (data) => {
+      console.log("🎯 서버로부터 실시간 픽셀 좌표 수신 완료! ->", data);
       if (data && typeof data.x === 'number' && typeof data.y === 'number') {
+        // 리액트 상태 가동
         setUserPos({ x: data.x, y: data.y });
       }
     });
 
     return () => {
-      if (socket) {
-        socket.off('location_update');
-        socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.off('location_update');
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
   }, []);
 
-  // 🎨 2. 인스턴스 모드를 활용한 단일 캔버스 라이프사이클 제어
+  // 🎨 2. p5.js 인스턴스 초기화 및 캔버스 생성
   useEffect(() => {
-    // [강력 청소] 컨테이너 내부에 남아있는 구형 캔버스 잔상을 날려버립니다.
     if (canvasRef.current) {
       canvasRef.current.innerHTML = "";
     }
@@ -55,20 +67,21 @@ const MapSketch = () => {
       p5InstanceRef.current = null;
     }
 
-    // p5.js 동적 임포트 및 인스턴스 격리화 실행
     import("p5").then((p5Module) => {
       const p5 = p5Module.default;
 
       const sketch = (p) => {
-        // 내부 렌더링용 로컬 좌표계 분리
+        // p5 내부 전역 위치 변수 (초기화)
         p.uX = 181;
         p.uY = 383;
 
         p.setup = () => {
-          // 중요: 특정 div 내부(canvasRef)에만 종속되도록 부모 패런팅 강제 설정
           const canvas = p.createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
           canvas.parent(canvasRef.current);
           p.textAlign(p.CENTER, p.CENTER);
+          
+          // 💡 [핵심 규칙] 무한 루프 렌더링을 멈추고 리액트 데이터가 올 때만 수동 렌더링 수행
+          p.noLoop(); 
         };
 
         p.draw = () => {
@@ -102,13 +115,12 @@ const MapSketch = () => {
             p.pop(); 
           }
 
-          // 실시간 사용자 마커 드로우
+          // ✨ 실시간 사용자 마커 드로우 (수동 렌더링 연동 최적화형)
           p.push();
-          let pulse = p.sin(p.frameCount * 0.05) * 6;
           p.fill(0, 122, 255, 40); p.noStroke();
-          p.circle(p.uX, p.uY, 24 + pulse);
+          p.circle(p.uX, p.uY, 24); // 외부 반경 가이드
           p.fill(0, 122, 255); p.stroke(255); p.strokeWeight(2);
-          p.circle(p.uX, p.uY, 12); 
+          p.circle(p.uX, p.uY, 12); // 동기화된 파란색 핵심 위치 점
           p.pop();
         };
 
@@ -124,9 +136,12 @@ const MapSketch = () => {
         };
       };
 
-      // 독립 샌드박스 인스턴스 실행 및 저장
       if (canvasRef.current) {
         p5InstanceRef.current = new p5(sketch);
+        // 인스턴스가 로드된 즉시 초기 위치 매핑
+        p5InstanceRef.current.uX = userPos.x;
+        p5InstanceRef.current.uY = userPos.y;
+        p5InstanceRef.current.redraw();
       }
     });
 
@@ -138,17 +153,18 @@ const MapSketch = () => {
     };
   }, []);
 
-  // 🔄 3. 소켓 위치 갱신 감지 시 p5 좌표 실시간 동기화
+  // 🔄 3. 리액트 userPos 업데이트 감지 시 -> p5 드로잉 변수 수동 동기화 및 강제 재스케치
   useEffect(() => {
     if (p5InstanceRef.current) {
+      console.log("⚡ p5 캔버스 내부 좌표 실시간 동기화 강제 집행:", userPos);
       p5InstanceRef.current.uX = userPos.x;
       p5InstanceRef.current.uY = userPos.y;
+      p5InstanceRef.current.redraw(); // 대기 중인 캔버스 스냅샷을 즉시 새로 그리도록 유도
     }
   }, [userPos]);
 
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: "20px", position: "relative" }}>
-      {/* 고유 타겟 엘리먼트 */}
       <div id="p5-canvas-target" ref={canvasRef} style={styles.canvasContainer}></div>
 
       {selectedArtwork && (
