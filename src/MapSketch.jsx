@@ -29,7 +29,7 @@ const MapSketch = () => {
 
     console.log("🌐 백엔드 서버로 최적화 소켓 연동 시도 중...");
     
-    socketRef.current = io("http://192.168.219.109:3000", {
+    socketRef.current = io("http://172.18.32.248:3000", {
       transports: ['websocket'],
       upgrade: false,
       forceNew: true,
